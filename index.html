@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Wishwood</title>
+<style>
+:root{--bg:#1a1c2c;--panel:#262b44;--panel2:#333c57;--ink:#f4f4f4;--dim:#94b0c2;--acc:#ffcd75;--good:#a7f070;--bad:#ef7d57}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+#app{max-width:520px;margin:0 auto;display:flex;flex-direction:column;min-height:100vh}
+header{display:flex;align-items:center;gap:6px;padding:8px 10px}
+header h1{font-size:16px;margin:0;flex:1;color:var(--acc);letter-spacing:2px}
+button{font:inherit;background:var(--panel2);color:var(--ink);border:0;border-radius:6px;padding:7px 10px;cursor:pointer}
+button:active{transform:translateY(1px)}
+button.pri{background:var(--acc);color:var(--bg);font-weight:bold}
+button.danger{background:#5a2333;color:#ffd0d0}
+#stat{font-size:11px;color:var(--dim)}
+#banner{margin:0 10px 8px;padding:8px 10px;background:#3b2f1f;color:var(--acc);border-radius:6px;font-size:12px;cursor:pointer}
+canvas#world{width:100%;display:block;image-rendering:pixelated;touch-action:manipulation;background:#38b764}
+.tabs{display:flex;gap:4px;padding:8px 10px 0}
+.tab{flex:1}
+.tab.on{background:var(--acc);color:var(--bg);font-weight:bold}
+.panel{background:var(--panel);margin:8px 10px 14px;border-radius:8px;padding:10px;min-height:160px}
+.dim{color:var(--dim)}.small{font-size:11px;margin-top:6px}
+.vh{font-size:14px;margin-bottom:2px}
+.needs{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:10px 0}
+.need span{font-size:10px;color:var(--dim)}
+.bar{height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin-top:2px}
+.bar>i{display:block;height:100%;transition:width .4s}
+.inv{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.inv canvas,.gallery canvas{image-rendering:pixelated;background:var(--panel2);border-radius:4px}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:6px;margin-top:8px}
+.gallery canvas{width:100%;cursor:pointer}
+#itemDetail{display:flex;gap:10px;align-items:center;margin-top:10px}
+#itemDetail canvas{width:72px;height:72px;image-rendering:pixelated;background:var(--panel2);border-radius:6px;flex:none}
+#whisperRow{display:flex;gap:6px;margin-top:10px}
+input,select{font:inherit;width:100%;background:var(--bg);color:var(--ink);border:1px solid #566c86;border-radius:6px;padding:8px}
+#log div{padding:4px 0;border-bottom:1px solid var(--panel2);color:var(--dim);font-size:12px}
+#log b{color:var(--ink);font-weight:normal}
+#modal{position:fixed;inset:0;background:rgba(10,10,20,.75);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+#modal[hidden]{display:none}
+.card{background:var(--panel);border-radius:10px;padding:14px;width:100%;max-width:420px;max-height:90vh;overflow:auto}
+.card h2{margin:0 0 10px;font-size:15px;color:var(--acc)}
+.card label{display:block;font-size:11px;color:var(--dim);margin-top:10px}
+.card label input,.card label select{margin-top:4px}
+.note{font-size:11px;color:var(--dim);margin:6px 0 0}
+.row{display:flex;gap:8px;margin-top:14px}
+hr{border:0;border-top:1px solid var(--panel2);margin:14px 0}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#f4f4f4;color:#1a1c2c;padding:8px 12px;border-radius:6px;font-size:12px;max-width:90vw;opacity:0;transition:opacity .25s;pointer-events:none;z-index:20}
+#toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1>WISHWOOD</h1><span id="stat"></span><button id="pauseBtn" aria-label="Pause">⏸</button><button id="setBtn" aria-label="Settings">⚙️</button></header>
+  <div id="banner" hidden></div>
+  <canvas id="world"></canvas>
+  <div class="tabs"><button class="tab on" data-t="who">Villager</button><button class="tab" data-t="items">Items</button><button class="tab" data-t="log">Log</button></div>
+  <div class="panel" id="p-who"><div id="whoInfo"></div><div id="whisperRow" hidden><input id="whisper" maxlength="80" placeholder="Whisper an idea… (e.g. a pirate hat)"><button id="wBtn">Whisper</button></div></div>
+  <div class="panel" id="p-items" hidden><div id="itemCount" class="dim"></div><div class="gallery" id="gallery"></div><div id="itemDetail"></div></div>
+  <div class="panel" id="p-log" hidden><div id="log"></div></div>
+</div>
+
+<div id="modal" hidden><div class="card">
+  <h2>Settings</h2>
+  <label>Anthropic API key<input id="kKey" type="password" placeholder="sk-ant-…" autocomplete="off"></label>
+  <p class="note">Saved only in this browser. It is never written into the page or your repo.</p>
+  <label>Thinking model (frequent, cheap)<input id="kFast" autocomplete="off"></label>
+  <label>Item artist model<input id="kSmart" autocomplete="off"></label>
+  <label>Max API calls per session<input id="kCap" type="number" min="0" step="10"></label>
+  <label>Pace<select id="kPace"><option value="0.6">Chill</option><option value="1">Normal</option><option value="1.6">Busy</option></select></label>
+  <div class="row"><button id="kSave" class="pri">Save</button><button id="kClose">Close</button></div>
+  <hr><button id="kReset" class="danger">Reset village</button>
+</div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const rand=a=>a[Math.floor(Math.random()*a.length)];
+
+/* ---------- storage ---------- */
+const LS={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+
+/* ---------- constants ---------- */
+const T=16,W=16,H=20,S=4,WP=W*T,HP=H*T;
+const PAL='1a1c2c 6b3d2a b13e53 ef7d57 ffcd75 a7f070 38b764 257179 a0703c 3b5dc9 41a6f6 73eff7 f4f4f4 94b0c2 566c86 e8a0b8'.split(' ').map(c=>'#'+c);
+const HEX='0123456789abcdef';
+const PAL_NAMES='0 near-black (outlines), 1 dark brown, 2 red, 3 orange, 4 yellow, 5 lime green, 6 green, 7 teal, 8 tan/wood, 9 blue, a sky blue, b cyan, c white, d light grey, e grey, f pink';
+const CATS=['food','drink','hat','clothing','tool','toy','instrument','furniture','decor','gift'];
+
+const NEEDS={
+  hunger:{label:'Hunger',aff:'eat',col:'#ef7d57',rate:.45,desc:'wants something to eat (it will be eaten)'},
+  style:{label:'Style',aff:'wear',col:'#e8a0b8',rate:.3,desc:'wants something new to wear (a hat or a piece of clothing)'},
+  comfort:{label:'Comfort',aff:'place',col:'#a0703c',rate:.32,desc:'wants a piece of furniture to put by their home and sit on'},
+  fun:{label:'Fun',aff:'hold',col:'#41a6f6',rate:.4,desc:'wants something to hold and play with (a toy, tool or instrument)'},
+  social:{label:'Social',aff:'gift',col:'#a7f070',rate:.34,desc:'wants a gift to give to a neighbour'}
+};
+const AFF_NEED={eat:'hunger',wear:'style',place:'comfort',hold:'fun',gift:'social'};
+
+const SEEDS=[
+ {id:'s1',name:'Red Apple',desc:'Crisp, shiny and straight from the orchard.',cat:'food',aff:'eat',by:'Village',rows:[
+ '................','.......1........','.......1.66.....','....00010660....','...0222222220...','..022c22222220..','..02c222222220..','..022222222220..','..022222222220..','..022222222220..','..012222222210..','...0122222210...','....01222210....','.....000000.....','................','................']},
+ {id:'s2',name:'Straw Hat',desc:'Keeps the sun off. Smells faintly of hay.',cat:'hat',aff:'wear',by:'Village',rows:[
+ '................','................','................','................','......0000......','.....044440.....','....04444440....','....04444440....','....02222220....','..000444444000..','.04444444444440.','0444444444444440','.00000000000000.','................','................','................']},
+ {id:'s3',name:'Wooden Stool',desc:'Three legs would wobble. This one has four.',cat:'furniture',aff:'place',by:'Village',rows:[
+ '................','................','................','................','................','...0000000000...','..088888888880..','..011111111110..','...0110000110...','...0110..0110...','...0110..0110...','...0110000110...','...0118888110...','...0110000110...','...0000..0000...','................']},
+ {id:'s4',name:'Reed Flute',desc:'Plays three notes, two of them on purpose.',cat:'instrument',aff:'hold',by:'Village',rows:[
+ '................','................','................','................','................','................','................','.00000000000000.','0888808080808880','0111111111111110','.00000000000000.','................','................','................','................','................']},
+ {id:'s5',name:'Wildflower Bunch',desc:'Picked from the verge. Mostly not weeds.',cat:'gift',aff:'gift',by:'Village',rows:[
+ '................','....22...ff.....','...2442.f44f....','....22...ff.....','.......33.......','......3443......','.......33.......','.....6..6..6....','......6.6.6.....','.......666......','.......666......','......06660.....','......0ccc0.....','......0ccc0.....','.......000......','................']}
+];
+
+const VDEF=[
+ {name:'Mabel',persona:'retired baker locked in an escalating feud with a seagull nobody else has ever seen',skin:'#f2c29b',hair:'#d4d4d4',shirt:'#b13e53',rates:{hunger:1.3,style:1.2}},
+ {name:'Otto',persona:'gloomy fisherman convinced the pond is haunted by a fish he wronged in 1987',skin:'#c68b5e',hair:'#566c86',shirt:'#3b5dc9',rates:{fun:1.3,social:.7}},
+ {name:'Pip',persona:'chaotic inventor who believes every problem can be solved with more springs',skin:'#f6d1b0',hair:'#ef7d57',shirt:'#ffcd75',rates:{fun:1.4,comfort:.7}},
+ {name:'Rosa',persona:'florist and village gossip who narrates her own life like a nature documentary',skin:'#8d5a3b',hair:'#1a1c2c',shirt:'#e8a0b8',rates:{style:1.4,social:1.3}},
+ {name:'Bram',persona:'blacksmith so lazy he once tried to forge a chair that sits for him',skin:'#e0a77e',hair:'#6b3d2a',shirt:'#257179',rates:{comfort:1.5,hunger:1.1}}
+];
+const HOUSES=[{x:2,y:3},{x:11,y:3},{x:2,y:13},{x:11,y:13},{x:4,y:16}];
+const BENCH={x:8,y:9},WS={x:8,y:10};
+
+const TPL={hunger:["Tummy's rumbling…","Snack o'clock!","I could eat a horse."],style:['Time for a new look.','I need a hat. Now.','Feeling frumpy today.'],comfort:['My feet ache.','I need a sit-down.','Oof, my back.'],fun:['So bored…',"Let's play!",'Need a distraction.'],social:['Who needs cheering up?',"I'll surprise someone!",'Feeling generous.']};
+
+/* ---------- config ---------- */
+const CFG=Object.assign({key:'',fast:'claude-haiku-5-5',smart:'claude-sonnet-5-5',cap:120,pace:1},JSON.parse(LS.get('wishwood.cfg')||'{}'));
+let calls=0,inflight=0,aiReadyAt=0,paused=false;
+
+/* ---------- map ---------- */
+let sd=1337;const sr=()=>(sd=(sd*16807)%2147483647)/2147483647;
+const G=[...Array(H)].map(()=>Array(W).fill(0)); // 0 grass 1 path 2 water 3 tree 4 house 5 bench 6 flowers
+for(let y=0;y<H;y++)for(let x=0;x<W;x++){if(sr()<.07)G[y][x]=6;if((y===0||y===H-1||x===0||x===W-1)&&sr()<.8)G[y][x]=3;}
+for(let x=1;x<W-1;x++)G[10][x]=1;
+for(let y=1;y<H-1;y++)G[y][7]=1;
+for(let y=7;y<=8;y++)for(let x=11;x<=13;x++)G[y][x]=2;
+[[4,7],[13,11],[10,16],[5,11]].forEach(([x,y])=>G[y][x]=3);
+HOUSES.forEach(h=>{for(let dy=0;dy<2;dy++)for(let dx=0;dx<2;dx++)G[h.y+dy][h.x+dx]=4;G[h.y+2][h.x]=1;});
+G[BENCH.y][BENCH.x]=5;
+
+const walkable=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&(G[y][x]===0||G[y][x]===1||G[y][x]===6);
+function findPath(sx,sy,tx,ty){
+  if(sx===tx&&sy===ty)return[];
+  if(!walkable(tx,ty))return null;
+  const k=(x,y)=>y*W+x,prev=new Map([[k(sx,sy),-1]]),q=[[sx,sy]];
+  while(q.length){
+    const[x,y]=q.shift();
+    for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx,ny=y+dy,nk=k(nx,ny);
+      if(!walkable(nx,ny)||prev.has(nk))continue;
+      prev.set(nk,k(x,y));
+      if(nx===tx&&ny===ty){const out=[];let c=nk;while(c!==k(sx,sy)){out.unshift({x:c%W,y:Math.floor(c/W)});c=prev.get(c);}return out;}
+      q.push([nx,ny]);
+    }
+  }
+  return null;
+}
+
+/* ---------- canvas ---------- */
+const cv=$('#world');cv.width=WP*S;cv.height=HP*S;
+const ctx=cv.getContext('2d');ctx.imageSmoothingEnabled=false;
+const bg=document.createElement('canvas');bg.width=WP*S;bg.height=HP*S;
+const b=bg.getContext('2d');b.setTransform(S,0,0,S,0,0);
+function P(c,x,y,w=1,h=1,cx=ctx){cx.fillStyle=c;cx.fillRect(x,y,w,h);}
+
+function drawBG(){
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const X=x*T,Y=y*T,g=G[y][x],R=()=>Math.floor(sr()*16);
+    P('#38b764',X,Y,T,T,b);for(let i=0;i<6;i++)P(sr()<.5?'#2f9e55':'#5cc77a',X+R(),Y+R(),1,1,b);
+    if(g===1){P('#c9a46a',X,Y,T,T,b);for(let i=0;i<8;i++)P('#b08850',X+R(),Y+R(),1,1,b);}
+    if(g===2){P('#41a6f6',X,Y,T,T,b);for(let i=0;i<4;i++)P('#73eff7',X+Math.floor(sr()*13),Y+R(),3,1,b);
+      if(!(y>0&&G[y-1][x]===2))P('#3b5dc9',X,Y,T,2,b);}
+    if(g===6){for(let i=0;i<3;i++){const fx=X+2+Math.floor(sr()*12),fy=Y+2+Math.floor(sr()*12);P('#257179',fx,fy+1,1,1,b);P(['#f4f4f4','#ffcd75','#e8a0b8'][i],fx,fy,1,1,b);}}
+    if(g===3){P('#2a8a4c',X+2,Y+13,12,2,b);P('#6b3d2a',X+7,Y+10,2,5,b);P('#1e6b3e',X+3,Y+1,10,11,b);P('#1e6b3e',X+1,Y+3,14,7,b);P('#2f9e55',X+4,Y+3,4,3,b);P('#2f9e55',X+3,Y+5,2,2,b);}
+    if(g===5){P('#2a8a4c',X+1,Y+14,14,2,b);P('#a0703c',X+1,Y+7,14,3,b);P('#6b3d2a',X+1,Y+10,14,1,b);P('#6b3d2a',X+2,Y+11,2,4,b);P('#6b3d2a',X+12,Y+11,2,4,b);P('#566c86',X+4,Y+4,6,3,b);P('#94b0c2',X+4,Y+4,6,1,b);P('#6b3d2a',X+11,Y+3,1,4,b);P('#94b0c2',X+10,Y+2,3,2,b);}
+  }
+  HOUSES.forEach((h,i)=>{
+    const X=h.x*T,Y=h.y*T,roof=VDEF[i].shirt;
+    P('#e8d2a8',X+2,Y+14,28,18,b);P('#c9b38a',X+2,Y+30,28,2,b);
+    for(let r=0;r<14;r++){const ins=Math.max(0,7-r);P(roof,X+ins,Y+r+1,32-2*ins,1,b);if(r%3===2)P('rgba(0,0,0,.18)',X+ins,Y+r+1,32-2*ins,1,b);}
+    P('#1a1c2c',X,Y+14,32,1,b);
+    P('#6b3d2a',X+4,Y+21,8,11,b);P('#ffcd75',X+10,Y+26,1,1,b);
+    P('#73eff7',X+18,Y+18,8,7,b);P('#6b3d2a',X+21,Y+18,1,7,b);P('#6b3d2a',X+18,Y+21,8,1,b);
+  });
+}
+
+/* ---------- items ---------- */
+function gridCanvas(rows,n){const c=document.createElement('canvas');c.width=c.height=n;const g=c.getContext('2d');
+  rows.forEach((r,y)=>{for(let x=0;x<n;x++){const ch=r[x];if(ch&&ch!=='.'){g.fillStyle=PAL[HEX.indexOf(ch)];g.fillRect(x,y,1,1);}}});return c;}
+function smallOf(rows){
+  const g=[...Array(10)].map(()=>Array(10).fill('.'));
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){
+    const cnt={};let op=0;
+    for(const[dx,dy]of[[0,0],[1,0],[0,1],[1,1]]){const c=rows[y*2+dy][x*2+dx];if(c!=='.'){op++;cnt[c]=(cnt[c]||0)+1;}}
+    let best='.';if(op>=2){let bn=0;for(const c in cnt)if(c!=='0'&&cnt[c]>bn){bn=cnt[c];best=c;}if(best==='.')best='0';}
+    g[y+1][x+1]=best;
+  }
+  const out=g.map(r=>r.slice());
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){if(g[y][x]!=='.')continue;
+    if([[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>{const c=(g[y+dy]||[])[x+dx];return c&&c!=='.'&&c!=='0';}))out[y][x]='0';}
+  return gridCanvas(out.map(r=>r.join('')),10);
+}
+function dominant(rows){const cnt={};rows.join('').split('').forEach(c=>{if(c!=='.'&&c!=='0')cnt[c]=(cnt[c]||0)+1;});let best='8',bn=0;for(const c in cnt)if(cnt[c]>bn){bn=cnt[c];best=c;}return PAL[HEX.indexOf(best)];}
+function mkItem(o){return Object.assign({},o,{big:gridCanvas(o.rows,16),small:smallOf(o.rows),color:dominant(o.rows)});}
+function cleanSprite(rows){
+  if(typeof rows==='string')rows=rows.split(/\r?\n/);
+  let r=(Array.isArray(rows)?rows:[]).map(s=>String(s).toLowerCase().replace(/\s/g,'').replace(/[^0-9a-f.]/g,'.')).filter(s=>s.length);
+  r=r.slice(0,16);while(r.length<16)r.push('.'.repeat(16));
+  return r.map(s=>(s+'.'.repeat(16)).slice(0,16));
+}
+
+let registry=[],decor=[],nextId=1;const LOG=[];
+const byId=id=>registry.find(i=>i.id===id)||null;
+
+/* ---------- villagers ---------- */
+const V=VDEF.map((d,i)=>{const h=HOUSES[i];return Object.assign({},d,{
+  home:{x:h.x,y:h.y+2},x:h.x*T+8,y:(h.y+2)*T+12,path:[],onArrive:null,state:'idle',idleT:1+Math.random()*3,cool:Math.random()*6,
+  needs:Object.fromEntries(Object.keys(NEEDS).map(k=>[k,55+Math.random()*45])),
+  rates:Object.assign(Object.fromEntries(Object.keys(NEEDS).map(k=>[k,1])),d.rates),
+  inv:[],hat:null,shirtOver:null,held:null,mode:null,timer:null,bubble:null,show:null,mem:[],whisper:null,
+  walkT:0,anim:0,dir:1,sitOn:null,thinking:false,inventing:false,working:false,sparkT:0,noteT:0});});
+let sel=null;
+const vtx=v=>Math.floor(v.x/T),vty=v=>Math.floor((v.y-1)/T);
+function walkTo(v,tx,ty,cb){v.sitOn=null;if(v.mode==='sit')v.mode=null;const p=findPath(vtx(v),vty(v),tx,ty);v.path=p||[];v.onArrive=cb||null;}
+function after(v,t,fn){v.timer={t,fn};}
+function say(v,t,dur=4){v.bubble={t:String(t).slice(0,90),life:dur};}
+function remember(v,t){v.mem.push(String(t).slice(0,70));if(v.mem.length>6)v.mem.shift();}
+function fill(v,k,amt=100){v.needs[k]=Math.min(100,v.needs[k]+amt);}
+function done(v){v.state='idle';v.idleT=1+Math.random()*2;}
+function lowest(v){let k=null,m=101;for(const n in v.needs)if(v.needs[n]<m){m=v.needs[n];k=n;}return k;}
+function wander(v){const opts=[];for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const x=vtx(v)+dx,y=vty(v)+dy;if(walkable(x,y)&&(dx||dy))opts.push({x,y});}if(opts.length){const t=rand(opts);walkTo(v,t.x,t.y);}}
+function freeSpot(v){
+  for(let r=1;r<=4;r++){const opts=[];
+    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+      if(Math.max(Math.abs(dx),Math.abs(dy))!==r)continue;
+      const x=v.home.x+dx,y=v.home.y+dy;
+      if(x<0||y<0||x>=W||y>=H)continue;
+      if(!(G[y][x]===0||G[y][x]===6))continue;
+      if(decor.some(d=>d.x===x&&d.y===y))continue;
+      if(findPath(vtx(v),vty(v),x,y)===null)continue;
+      opts.push({x,y});
+    }
+    if(opts.length)return rand(opts);
+  }
+  return null;
+}
+function adjFree(o){const x=vtx(o),y=vty(o);for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]])if(walkable(x+dx,y+dy))return{x:x+dx,y:y+dy};return{x,y};}
+
+/* ---------- AI ---------- */
+const DECIDE_TOOL={name:'decide',description:"Record the villager's decision.",input_schema:{type:'object',properties:{
+  thought:{type:'string',description:'Funny in-character line said out loud, max 14 words'},
+  action:{type:'string',enum:['invent','reuse']},
+  reuse_id:{type:'string',description:'If reusing: the id of an existing village item'},
+  idea:{type:'string',description:'If inventing: the thing they want, absurd and oddly specific, max 14 words'}},required:['thought','action']}};
+const MAKE_TOOL={name:'make_item',description:'Create the item and its 16x16 pixel sprite.',input_schema:{type:'object',properties:{
+  name:{type:'string',description:'2-4 words'},
+  desc:{type:'string',description:'One deadpan, funny sentence, max 18 words'},
+  quip:{type:'string',description:'What the inventor says out loud the first time they use it, max 12 words'},
+  reaction:{type:'string',description:'What a neighbour says if they are handed this, max 10 words'},
+  category:{type:'string',enum:CATS},
+  affordance:{type:'string',enum:['eat','wear','hold','place','gift']},
+  sprite:{type:'array',items:{type:'string'},description:'Exactly 16 rows, each exactly 16 palette characters'}},required:['name','desc','category','affordance','quip','sprite']}};
+const SYS_DECIDE=`You write the inner life of a villager in Wishwood, a pixel-art village that is cozy on the surface and completely unhinged underneath. Your only job is to be funny.
+There are NO limits on what villagers want. Their desires can be absurd, surreal, petty, grandiose, oddly specific, physically impossible, emotionally loaded or wildly disproportionate to the problem: a hat that makes them taller than their enemies, a sandwich with a legal right to vote, a chair that apologises, a tiny weather system for personal use, a trophy for an achievement that did not happen. Anything they dream up, the workbench can somehow make.
+Lean into their personality, their grudges and the village gossip; one-upping or copying neighbours is funny. Never pick the obvious or sensible option. Keep it cheeky rather than hateful or explicit. Always answer with the decide tool.`;
+const SYS_MAKE=`You are the pixel artist for Wishwood, a pixel-art village where villagers invent ridiculous things. Name and describe the item with dry, deadpan comedy, then draw it as a 16x16 sprite.
+Ideas may be abstract or impossible ("a jar of Tuesday", "a hat with opinions"). Never refuse: find the funniest concrete object that represents it and draw that, with a clear readable silhouette.
+Palette, one character per pixel: '.' transparent, ${PAL_NAMES}.
+Rules: centre the object and fill most of the 16x16 area; outline the silhouette with 0; use 2-3 shades for volume with light from the top-left; bold, readable shapes; no text, no background, no ground shadow. Hats: centred, brim across the lower middle rows. Furniture: front view, legs reaching the bottom rows. Every row must be exactly 16 characters.
+Example (an apple):
+${SEEDS[0].rows.join('\n')}`;
+
+function aiOK(chain){return !!CFG.key&&calls<CFG.cap&&(chain||(inflight<2&&performance.now()>=aiReadyAt));}
+async function claude(model,system,user,tool,max){
+  calls++;inflight++;aiReadyAt=performance.now()+3500;updStat();
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':CFG.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model,max_tokens:max,system,tools:[tool],tool_choice:{type:'tool',name:tool.name},messages:[{role:'user',content:user}]})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){const e=new Error((j.error&&j.error.message)||('HTTP '+r.status));e.status=r.status;throw e;}
+    const tu=(j.content||[]).find(c=>c.type==='tool_use');
+    if(!tu)throw new Error('No tool output');
+    return tu.input;
+  }finally{inflight--;updStat();}
+}
+let lastErr=0;
+function aiErr(e){
+  console.warn(e);
+  if(Date.now()-lastErr<4000)return;lastErr=Date.now();
+  if(e.status===401)toast('API key rejected. Check it in ⚙️');
+  else if(e.status===404||/model/i.test(e.message))toast('Model not found. Check the model names in ⚙️');
+  else toast('AI error: '+e.message.slice(0,90));
+  log('<b>AI error</b> '+esc(e.message.slice(0,120)));
+}
+function decidePrompt(v,need,opts){
+  const own=v.inv.map(byId).filter(Boolean).map(i=>i.name).slice(-8).join(', ')||'nothing';
+  return `Villager: ${v.name}, ${v.persona}
+Current need: ${need} (${NEEDS[need].desc})
+Owns: ${own}
+Recent: ${v.mem.slice(-4).join('; ')||'nothing yet'}
+${gossip(v)}
+Village items for this need:
+${opts.slice(-20).map(i=>`- ${i.id}: ${i.name} (${i.desc}) by ${i.by}`).join('\n')||'(none yet)'}
+Decide what you want. Invent something new and ridiculous about 90% of the time; only reuse an existing item by id if it would be funnier.`;
+}
+function gossip(v){
+  const g=registry.filter(i=>i.by!=='Village'&&i.by!==v.name).slice(-5).map(i=>`${i.by} made "${i.name}" (${i.desc})`);
+  return 'Village gossip: '+(g.length?g.join('; '):'nothing has happened yet, which is suspicious');
+}
+function whimPrompt(v){
+  return `Villager: ${v.name}, ${v.persona}
+Recent: ${v.mem.slice(-4).join('; ')||'nothing yet'}
+${gossip(v)}
+Out of nowhere, ${v.name} is struck by a sudden, irrational want. It has nothing to do with their needs. What do they want? Use action "invent".`;
+}
+function makePrompt(v,need,idea){
+  return `${v.name} (${v.persona}) wants: ${idea}.
+${need?`Whatever it is, it has to work as: ${NEEDS[need].desc}. Use affordance "${NEEDS[need].aff}".`:'Pick the funniest affordance that fits: eat, wear, hold, place (furniture to sit on) or gift.'}`;
+}
+function addItem(r,v,need){
+  const aff=need?NEEDS[need].aff:(AFF_NEED[r.affordance]?r.affordance:'hold');
+  let cat=CATS.includes(r.category)?r.category:'decor';
+  if(aff==='wear'&&!['hat','clothing'].includes(cat))cat='hat';
+  if(aff==='eat'&&!['food','drink'].includes(cat))cat='food';
+  if(aff==='place'&&!['furniture','decor'].includes(cat))cat='furniture';
+  const rows=cleanSprite(r.sprite);
+  if(rows.join('').replace(/\./g,'').length<12)throw new Error('Sprite came back empty');
+  const it=mkItem({id:'i'+(nextId++),name:String(r.name||'Thing').slice(0,32),desc:String(r.desc||'').slice(0,160),quip:String(r.quip||'').slice(0,90),reaction:String(r.reaction||'').slice(0,80),cat,aff,rows,by:v.name});
+  registry.push(it);save();if(tab==='items')renderItems();
+  return it;
+}
+
+/* ---------- behaviour ---------- */
+async function decide(v,need){
+  v.state='busy';v.cool=18/CFG.pace;
+  if(v.whisper){const idea=v.whisper;v.whisper=null;if(aiOK(true)){say(v,'Ooh! '+idea);return craftNew(v,null,idea);}}
+  if(!need)return whim(v);
+  const aff=NEEDS[need].aff,opts=registry.filter(i=>i.aff===aff);
+  if(need==='comfort'){const mine=decor.filter(d=>d.owner===v.name);if(mine.length&&Math.random()<.5){say(v,'Back to my favourite seat.');return sitOn(v,rand(mine));}}
+  const owned=v.inv.map(byId).filter(i=>i&&i.aff===aff&&aff!=='eat'&&aff!=='gift');
+  if(!aiOK()){
+    const pick=owned.length&&Math.random()<.5?rand(owned):rand(opts);
+    if(!pick){done(v);return;}
+    say(v,rand(TPL[need]));return craftCopy(v,pick);
+  }
+  v.thinking=true;
+  try{
+    const r=await claude(CFG.fast,SYS_DECIDE,decidePrompt(v,need,opts),DECIDE_TOOL,300);
+    v.thinking=false;say(v,r.thought||'Hmm…');remember(v,'thought: '+(r.thought||''));
+    if(r.action==='reuse'){const it=byId(r.reuse_id);if(it&&it.aff===aff)return craftCopy(v,it);}
+    if(aiOK(true))return craftNew(v,need,r.idea||('something for my '+need));
+    const it=rand(opts);if(it)return craftCopy(v,it);done(v);
+  }catch(e){
+    v.thinking=false;aiErr(e);
+    const it=rand(opts);if(it){say(v,rand(TPL[need]));return craftCopy(v,it);}done(v);
+  }
+}
+async function whim(v){
+  if(!aiOK()){done(v);return;}
+  v.thinking=true;
+  try{
+    const r=await claude(CFG.fast,SYS_DECIDE,whimPrompt(v),DECIDE_TOOL,300);
+    v.thinking=false;say(v,r.thought||'!!');remember(v,'whim: '+(r.thought||''));
+    log(`<b>${esc(v.name)}</b> had a sudden urge`);
+    if(aiOK(true))return craftNew(v,null,r.idea||'something nobody asked for');
+    done(v);
+  }catch(e){v.thinking=false;aiErr(e);done(v);}
+}
+function craftCopy(v,item){
+  if(v.inv.includes(item.id)&&item.aff!=='eat'&&item.aff!=='gift')return useItem(v,item);
+  v.state='busy';
+  walkTo(v,WS.x,WS.y,()=>{v.working=true;after(v,1.6,()=>{v.working=false;
+    if(item.aff!=='eat'&&item.aff!=='gift'&&!v.inv.includes(item.id))v.inv.push(item.id);
+    useItem(v,item);});});
+}
+async function craftNew(v,need,idea){
+  v.state='busy';v.inventing=true;
+  log(`<b>${esc(v.name)}</b> is inventing <i>${esc(idea)}</i>`);remember(v,'inventing '+idea);
+  const arrive=new Promise(res=>walkTo(v,WS.x,WS.y,res));
+  let item=null;
+  try{const r=await claude(CFG.smart,SYS_MAKE,makePrompt(v,need,idea),MAKE_TOOL,1400);item=addItem(r,v,need);}catch(e){aiErr(e);}
+  await arrive;v.inventing=false;
+  if(!item){
+    const opts=registry.filter(i=>!need||i.aff===NEEDS[need].aff);item=rand(opts);
+    if(!item){done(v);return;}
+    say(v,"Drat. I'll make an old one.");
+  }else log(`<b>${esc(v.name)}</b> invented <b>${esc(item.name)}</b>: ${esc(item.desc)}`);
+  v.working=true;
+  after(v,1.2,()=>{v.working=false;v.show={item,life:2.4};burst(v.x,v.y-26,'#ffcd75',14);
+    if(item.aff!=='eat'&&item.aff!=='gift'&&!v.inv.includes(item.id))v.inv.push(item.id);
+    after(v,2.4,()=>useItem(v,item));});
+}
+function sitOn(v,d){walkTo(v,d.x,d.y,()=>{v.sitOn=d;v.mode='sit';after(v,4,()=>{v.mode=null;v.sitOn=null;fill(v,'comfort');done(v);});});}
+function useItem(v,item){
+  v.state='busy';const need=AFF_NEED[item.aff];remember(v,'used '+item.name);
+  if(item.quip&&item.by===v.name&&!item.quipped){item.quipped=true;say(v,item.quip,5);}
+  if(item.aff==='eat'){v.held=item;v.mode='eat';after(v,3,()=>{v.held=null;v.mode=null;fill(v,need);burst(v.x,v.y-10,'#ffcd75',6);done(v);});}
+  else if(item.aff==='wear'){
+    if(item.cat==='clothing')v.shirtOver=item;else v.hat=item;
+    if(!v.inv.includes(item.id))v.inv.push(item.id);
+    burst(v.x,v.y-14,'#f4f4f4',10);fill(v,need);save();after(v,1.5,()=>done(v));
+  }
+  else if(item.aff==='hold'){v.held=item;v.mode=item.cat==='instrument'?'play':'swing';after(v,4,()=>{v.held=null;v.mode=null;fill(v,need);done(v);});}
+  else if(item.aff==='place'){
+    const spot=freeSpot(v);
+    if(!spot){v.held=item;v.mode='swing';after(v,2,()=>{v.held=null;v.mode=null;fill(v,need);done(v);});return;}
+    v.held=item;
+    walkTo(v,spot.x,spot.y,()=>{v.held=null;const d={id:item.id,x:spot.x,y:spot.y,owner:v.name};decor.push(d);if(decor.length>30)decor.shift();save();
+      burst(spot.x*T+8,spot.y*T+8,'#a0703c',8);log(`<b>${esc(v.name)}</b> placed a ${esc(item.name)} by their house`);sitOn(v,d);});
+  }
+  else if(item.aff==='gift'){
+    const others=V.filter(o=>o!==v&&o.state==='idle'&&!o.path.length);
+    if(!others.length){v.held=item;v.mode='swing';after(v,3,()=>{v.held=null;v.mode=null;fill(v,need,60);done(v);});return;}
+    const o=rand(others);o.state='receiving';v.held=item;const t=adjFree(o);
+    walkTo(v,t.x,t.y,()=>{
+      v.held=null;o.held=item;o.mode='swing';
+      for(let i=0;i<4;i++)floatTxt(o.x+(Math.random()*10-5),o.y-18,'♥','#b13e53');
+      say(o,item.reaction||rand(['For me? Lovely!',"Oh, you shouldn't have!",`Thank you, ${v.name}!`]),4.5);
+      fill(v,need);o.needs.social=Math.min(100,o.needs.social+40);
+      if(!o.inv.includes(item.id))o.inv.push(item.id);
+      remember(o,`got ${item.name} from ${v.name}`);
+      log(`<b>${esc(v.name)}</b> gave <b>${esc(o.name)}</b> a ${esc(item.name)}`);
+      after(o,2.5,()=>{o.held=null;o.mode=null;o.state='idle';o.idleT=1;});
+      after(v,1,()=>done(v));
+    });
+  }
+}
+
+/* ---------- particles ---------- */
+let parts=[];
+function burst(x,y,c,n){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=15+Math.random()*25;parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-15,g:60,life:.6+Math.random()*.4,c});}}
+function floatTxt(x,y,t,c){parts.push({x,y,vx:(Math.random()-.5)*8,vy:-14,g:0,life:1.2,c,t});}
+function updParts(dt){for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=p.g*dt;p.life-=dt;}parts=parts.filter(p=>p.life>0);}
+
+/* ---------- update ---------- */
+function upd(v,dt){
+  v.anim+=dt;v.cool-=dt;
+  for(const k in v.needs)v.needs[k]=Math.max(0,v.needs[k]-dt*NEEDS[k].rate*v.rates[k]*CFG.pace);
+  if(v.path.length){
+    const n=v.path[0],tx=n.x*T+8,ty=n.y*T+12,dx=tx-v.x,dy=ty-v.y,d=Math.hypot(dx,dy),sp=24*dt;
+    if(Math.abs(dx)>.5)v.dir=dx>0?1:-1;
+    if(d<=sp){v.x=tx;v.y=ty;v.path.shift();}else{v.x+=dx/d*sp;v.y+=dy/d*sp;}
+    v.walkT+=dt;
+  }else if(v.onArrive){const f=v.onArrive;v.onArrive=null;f();}
+  if(v.timer){v.timer.t-=dt;if(v.timer.t<=0){const f=v.timer.fn;v.timer=null;f();}}
+  if(v.bubble){v.bubble.life-=dt;if(v.bubble.life<=0)v.bubble=null;}
+  if(v.show){v.show.life-=dt;if(v.show.life<=0)v.show=null;}
+  if(v.working||(v.inventing&&!v.path.length)){v.sparkT-=dt;if(v.sparkT<=0){v.sparkT=.3;burst(BENCH.x*T+7,BENCH.y*T+5,rand(['#ffcd75','#f4f4f4','#ef7d57']),3);}}
+  if(v.mode==='play'){v.noteT-=dt;if(v.noteT<=0){v.noteT=.45;floatTxt(v.x+4*v.dir,v.y-18,rand(['♪','♫']),'#f4f4f4');}}
+  if(v.state==='idle'&&!v.path.length&&!v.timer){
+    v.idleT-=dt;
+    if(v.idleT<=0){v.idleT=2+Math.random()*3;const k=lowest(v);
+      if(v.whisper||(k&&v.needs[k]<50&&v.cool<=0))decide(v,k);
+      else if(v.cool<=0&&CFG.key&&Math.random()<.25)decide(v,null);
+      else if(Math.random()<.6)wander(v);}
+  }
+}
+
+/* ---------- draw ---------- */
+function drawRot(img,cx,cy,size,ang){ctx.save();ctx.translate(cx,cy);ctx.rotate(ang);ctx.drawImage(img,-size/2,-size/2,size,size);ctx.restore();}
+function drawV(v){
+  const walking=v.path.length>0,f=walking?Math.floor(v.walkT*8)%2:0,sit=v.mode==='sit';
+  const x=Math.round(v.x),y=Math.round(v.y)-(sit?3:0);
+  const ox=x-5,oy=y-14-(walking?f:0)+(sit?2:0);
+  P('rgba(0,0,0,.25)',x-4,Math.round(v.y)-1,8,2);
+  const shirt=v.shirtOver?v.shirtOver.color:v.shirt;
+  if(!sit){P('#29366f',ox+3,oy+11,2,f?2:3);P('#29366f',ox+5,oy+11,2,f?3:2);}else P('#29366f',ox+2,oy+11,6,2);
+  P(shirt,ox+2,oy+6,6,5);P('rgba(0,0,0,.2)',ox+2,oy+10,6,1);
+  P(v.skin,ox+1,oy+6,1,4);P(v.skin,ox+8,oy+6,1,4);
+  P(v.skin,ox+2,oy+1,6,5);
+  P(v.hair,ox+2,oy,6,2);P(v.hair,v.dir>0?ox+2:ox+7,oy+2,1,2);
+  const ex=v.dir>0?1:0;P('#1a1c2c',ox+3+ex,oy+3);P('#1a1c2c',ox+5+ex,oy+3);
+  if(v.mode==='eat'&&Math.floor(v.anim*6)%2)P('#6b3d2a',ox+4+ex,oy+5,2,1);
+  if(v.hat)ctx.drawImage(v.hat.small,ox,oy-6,10,10);
+  if(v.held){
+    const it=v.held;
+    if(v.mode==='eat'){const s=v.timer?Math.max(.25,v.timer.t/3):1;drawRot(it.small,x+2*v.dir,oy+6+Math.sin(v.anim*12),10*s,0);}
+    else if(v.mode==='swing')drawRot(it.small,x+5*v.dir,oy+8,10,Math.sin(v.anim*8)*.6);
+    else if(v.mode==='play')drawRot(it.small,x+3*v.dir,oy+6+Math.sin(v.anim*10)*.8,10,-.3*v.dir);
+    else drawRot(it.small,x+4*v.dir,oy+8,10,0);
+  }
+  if(v.working||(v.inventing&&!walking)){ctx.save();ctx.translate(x+5*v.dir,oy+8);ctx.rotate(Math.sin(v.anim*14)*.9);P('#6b3d2a',-.5,-6,1,6);P('#94b0c2',-2,-7,4,2);ctx.restore();}
+}
+function wrap(text,max){const words=text.split(' '),lines=[];let cur='';for(const w of words){const t=cur?cur+' '+w:w;if(ctx.measureText(t).width>max&&cur){lines.push(cur);cur=w;}else cur=t;}if(cur)lines.push(cur);return lines.slice(0,4);}
+function bubble(x,y,text){
+  ctx.font='bold 7px system-ui,-apple-system,sans-serif';
+  const lines=wrap(text,96),w=Math.ceil(Math.max(...lines.map(l=>ctx.measureText(l).width)))+8,h=lines.length*8+5;
+  let bx=Math.round(x-w/2);bx=Math.max(2,Math.min(WP-w-2,bx));let by=Math.max(2,Math.round(y-h-4));
+  P('#1a1c2c',bx-1,by-1,w+2,h+2);P('#f4f4f4',bx,by,w,h);
+  const tx=Math.max(bx+2,Math.min(bx+w-5,Math.round(x-1)));P('#1a1c2c',tx-1,by+h+1,5,1);P('#f4f4f4',tx,by+h,3,2);P('#1a1c2c',tx+1,by+h+2,1,1);
+  ctx.fillStyle='#1a1c2c';lines.forEach((l,i)=>ctx.fillText(l,bx+4,by+8+i*8));
+}
+function draw(){
+  ctx.setTransform(1,0,0,1,0,0);ctx.imageSmoothingEnabled=false;ctx.drawImage(bg,0,0);
+  ctx.setTransform(S,0,0,S,0,0);ctx.imageSmoothingEnabled=false;
+  const ents=[...decor.map(d=>({k:d.y*T+10,d})),...V.map(v=>({k:v.sitOn?v.sitOn.y*T+16:v.y,v}))].sort((a,b)=>a.k-b.k);
+  for(const e of ents){if(e.d){const it=byId(e.d.id);if(it)ctx.drawImage(it.big,e.d.x*T,e.d.y*T,16,16);}else drawV(e.v);}
+  for(const p of parts){ctx.globalAlpha=Math.min(1,p.life*2);if(p.t){ctx.font='bold 8px system-ui,sans-serif';ctx.fillStyle=p.c;ctx.fillText(p.t,p.x-3,p.y);}else P(p.c,Math.round(p.x),Math.round(p.y),1,1);}
+  ctx.globalAlpha=1;
+  for(const v of V){
+    const top=v.y-22;
+    if(v===sel){const by=top-2+Math.sin(v.anim*5);P('#1a1c2c',v.x-3,by-1,7,1);P('#ffcd75',v.x-2,by,5,1);P('#ffcd75',v.x-1,by+1,3,1);P('#ffcd75',v.x,by+2,1,1);}
+    if(v.show){const bx=Math.round(v.x-9),by=Math.round(top-20+Math.sin(v.anim*4)*1.5);P('#1a1c2c',bx-1,by-1,20,20);P('#f4f4f4',bx,by,18,18);ctx.drawImage(v.show.item.big,bx+1,by+1,16,16);}
+    else if(v.bubble)bubble(v.x,top,v.bubble.t);
+    else if(v.thinking)bubble(v.x,top,'.'.repeat(1+Math.floor(v.anim*3)%3));
+    else if(v.inventing)bubble(v.x,top,'inventing…');
+  }
+}
+
+/* ---------- save/load ---------- */
+function save(){LS.set('wishwood.state',JSON.stringify({nextId,
+  registry:registry.map(i=>({id:i.id,name:i.name,desc:i.desc,quip:i.quip,reaction:i.reaction,cat:i.cat,aff:i.aff,rows:i.rows,by:i.by})),decor,
+  vills:V.map(v=>({name:v.name,needs:v.needs,inv:v.inv,hat:v.hat&&v.hat.id,shirtOver:v.shirtOver&&v.shirtOver.id,mem:v.mem})),log:LOG.slice(0,40)}));}
+function load(){
+  try{const s=JSON.parse(LS.get('wishwood.state')||'null');if(!s)return;
+    nextId=s.nextId||1;registry=(s.registry||[]).map(mkItem);decor=(s.decor||[]).filter(d=>byId(d.id));
+    (s.vills||[]).forEach(sv=>{const v=V.find(x=>x.name===sv.name);if(!v)return;Object.assign(v.needs,sv.needs||{});v.inv=(sv.inv||[]).filter(byId);v.hat=byId(sv.hat);v.shirtOver=byId(sv.shirtOver);v.mem=sv.mem||[];});
+    LOG.push(...(s.log||[]));
+  }catch(e){registry=[];decor=[];}
+}
+
+/* ---------- UI ---------- */
+let tab='who';
+function setTab(t){tab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===t));['who','items','log'].forEach(n=>$('#p-'+n).hidden=n!==t);if(t==='items')renderItems();if(t==='log')renderLog();if(t==='who')renderWho();}
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>setTab(b.dataset.t));
+function thumb(it,size){const c=document.createElement('canvas');c.width=c.height=16;c.getContext('2d').drawImage(it.big,0,0);if(size)c.style.width=c.style.height=size+'px';c.title=it.name;return c;}
+function statusOf(v){return v.thinking?'thinking…':v.inventing?'inventing something…':v.working?'crafting':v.mode==='sit'?'relaxing':v.mode==='eat'?'eating':v.mode==='play'?'playing music':v.mode==='swing'?'playing':v.state==='receiving'?'waiting for a gift':v.path.length?'walking':'pottering about';}
+function renderWho(){
+  const el=$('#whoInfo'),v=sel;
+  if(!v){el.innerHTML='<p class="dim">Tap a villager to see what they want, what they own, and to whisper them an idea.</p>';$('#whisperRow').hidden=true;return;}
+  $('#whisperRow').hidden=false;
+  el.innerHTML=`<div class="vh"><b style="color:${v.shirt}">${esc(v.name)}</b> <span class="dim">· ${statusOf(v)}</span></div>
+  <div class="dim small">${esc(v.persona)}</div>
+  <div class="needs">${Object.keys(NEEDS).map(k=>`<div class="need"><span>${NEEDS[k].label}</span><div class="bar"><i style="width:${v.needs[k]|0}%;background:${NEEDS[k].col}"></i></div></div>`).join('')}</div>
+  <div class="small">Wearing: ${[v.hat,v.shirtOver].filter(Boolean).map(i=>esc(i.name)).join(', ')||'nothing special'}</div>
+  <div class="inv" id="invRow"></div>
+  <div class="small dim">${v.mem.slice(-3).reverse().map(esc).join('<br>')}</div>`;
+  const inv=$('#invRow');v.inv.slice(-14).forEach(id=>{const it=byId(id);if(it)inv.appendChild(thumb(it,30));});
+}
+function renderItems(){
+  const made=registry.filter(i=>i.by!=='Village').length;
+  $('#itemCount').textContent=`${registry.length} items · ${made} invented by villagers`;
+  const g=$('#gallery');g.innerHTML='';
+  registry.slice().reverse().forEach(it=>{const c=thumb(it);c.onclick=()=>showItem(it);g.appendChild(c);});
+}
+function showItem(it){const d=$('#itemDetail');d.innerHTML='';d.appendChild(thumb(it));const t=document.createElement('div');
+  t.innerHTML=`<b>${esc(it.name)}</b><div class="dim small">${esc(it.desc)}</div><div class="small">${esc(it.cat)} · ${esc(it.aff)} · by ${esc(it.by)}</div>`;d.appendChild(t);}
+function log(h){LOG.unshift(h);if(LOG.length>80)LOG.length=80;if(tab==='log')renderLog();}
+function renderLog(){$('#log').innerHTML=LOG.map(l=>`<div>${l}</div>`).join('')||'<div>Nothing has happened yet.</div>';}
+function updStat(){$('#stat').textContent=CFG.key?`AI ${calls}/${CFG.cap}`:'offline';
+  const bn=$('#banner');if(!CFG.key){bn.hidden=false;bn.textContent='Villagers are using starter items. Tap here to add your Anthropic API key so they can invent their own.';}
+  else if(calls>=CFG.cap){bn.hidden=false;bn.textContent='Session call limit reached, so villagers are reusing items. Raise it in ⚙️.';}
+  else bn.hidden=true;}
+let toastT;function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('on'),3200);}
+
+cv.addEventListener('click',e=>{
+  const r=cv.getBoundingClientRect(),wx=(e.clientX-r.left)/r.width*WP,wy=(e.clientY-r.top)/r.height*HP;
+  let best=null,bd=12;for(const v of V){const d=Math.hypot(v.x-wx,v.y-8-wy);if(d<bd){bd=d;best=v;}}
+  if(best){sel=best;setTab('who');return;}
+  const tx=Math.floor(wx/T),ty=Math.floor(wy/T),d=decor.find(d=>d.x===tx&&d.y===ty);
+  if(d){const it=byId(d.id);if(it)toast(`${it.name}, placed by ${d.owner}`);}
+});
+$('#wBtn').onclick=()=>{
+  const t=$('#whisper').value.trim();if(!t||!sel)return;
+  if(!CFG.key){toast('Add your API key in ⚙️ first');return;}
+  sel.whisper=t.slice(0,80);$('#whisper').value='';say(sel,'Hm? What was that?',2);
+  log(`You whispered to <b>${esc(sel.name)}</b>: ${esc(t)}`);
+  if(sel.state==='idle'){sel.idleT=0;sel.cool=0;}else toast(`${sel.name} will get to it when they're free`);
+};
+$('#whisper').addEventListener('keydown',e=>{if(e.key==='Enter')$('#wBtn').click();});
+$('#pauseBtn').onclick=()=>{paused=!paused;$('#pauseBtn').textContent=paused?'▶':'⏸';};
+function openSettings(){$('#kKey').value=CFG.key;$('#kFast').value=CFG.fast;$('#kSmart').value=CFG.smart;$('#kCap').value=CFG.cap;$('#kPace').value=String(CFG.pace);$('#modal').hidden=false;}
+$('#setBtn').onclick=openSettings;$('#banner').onclick=openSettings;
+$('#kClose').onclick=()=>$('#modal').hidden=true;
+$('#kSave').onclick=()=>{CFG.key=$('#kKey').value.trim();CFG.fast=$('#kFast').value.trim()||'claude-haiku-5-5';CFG.smart=$('#kSmart').value.trim()||'claude-sonnet-5-5';
+  CFG.cap=Math.max(0,parseInt($('#kCap').value,10)||0);CFG.pace=parseFloat($('#kPace').value)||1;
+  LS.set('wishwood.cfg',JSON.stringify(CFG));$('#modal').hidden=true;updStat();toast(CFG.key?'Saved. Villagers can invent now':'Saved');};
+$('#kReset').onclick=()=>{if(confirm('Reset the village? All invented items will be lost.')){LS.del('wishwood.state');location.reload();}};
+
+/* ---------- boot ---------- */
+drawBG();load();
+SEEDS.forEach(s=>{if(!byId(s.id))registry.unshift(mkItem(s));});
+if(!LOG.length)log('Welcome to <b>Wishwood</b>. Villagers will make what they need.');
+updStat();renderWho();
+let last=performance.now(),saveT=0,uiT=0;
+function loop(t){
+  const dt=Math.min(.05,(t-last)/1000);last=t;
+  if(!paused){V.forEach(v=>upd(v,dt));updParts(dt);saveT+=dt;if(saveT>5){saveT=0;save();}}
+  uiT+=dt;if(uiT>.5){uiT=0;if(tab==='who'&&sel)renderWho();}
+  draw();requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
